@@ -79,7 +79,8 @@ contract Testing is Test {
         for (uint i; i<11; i++) {
             _data[i] = call;
         }
-
+        //We are looping a payable function so msg.value will still be the same even if we call multiple times commitEth
+        //The first we buy 100_000e18 of token, then we withdraw 100 ether per call
         dutchAuction.multicall{value:100e18}(_data);
 
         vm.stopPrank();

